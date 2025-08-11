@@ -1,0 +1,9 @@
+{
+  "name": "simpleswap-whitelabel-live-currencies-poll",
+  "private": true,
+  "version": "1.8.0",
+  "type": "module",
+  "description": "White-label SimpleSwap UI with live currencies, multichain validation, memo/tag, highlights, Fix now, 10s polling, and explorer links",
+  "scripts": { "dev": "vercel dev", "start": "node api/health.js" },
+  "engines": { "node": ">=18" }
+}

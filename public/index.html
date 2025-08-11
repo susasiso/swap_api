@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="ko"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>라이브 드롭다운 + 폴링 + 탐색기 링크</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg1:#0d2aa6;--bg2:#1f48ff;--ink:#eaf0ff;--muted:#b9c7ff;--accent:#2563ff;--ok:#16c784;--warn:#ffd166;--err:#ff6b8a}
+*{box-sizing:border-box} body{margin:0;font-family:'Noto Sans KR',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;background:linear-gradient(140deg,var(--bg1),var(--bg2));color:var(--ink);display:flex;align-items:center;justify-content:center;padding:16px}
+.wrap{width:min(1080px,100%);background:rgba(10,16,40,.9);border-radius:18px;box-shadow:0 30px 60px rgba(0,0,0,.35);padding:20px}
+h1{margin:4px 0 4px;font-size:22px} p.lead{margin:0 0 12px;color:#b9c7ff}
+.grid{display:grid;grid-template-columns:1.4fr 1fr;gap:18px} @media (max-width: 920px){ .grid{grid-template-columns:1fr} }
+fieldset{border:1px solid #22358a;border-radius:14px;padding:12px}
+label{display:block;font-size:12px;opacity:.9;margin:6px 0}
+input,select{width:100%;padding:12px;border-radius:12px;border:1px solid #283a8f;background:#081233;color:#e7edff}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{padding:12px 14px;border:0;border-radius:12px;background:var(--accent);color:#fff;font-weight:800;cursor:pointer}
+button.secondary{background:#334155} button[disabled]{opacity:.6;cursor:not-allowed}
+.error{display:none;background:#2b1230;color:#ffd1dd;border:1px solid var(--err);border-radius:10px;padding:10px;margin:10px 0}
+.out{background:#081233;border:1px solid #283a8f;border-radius:12px;padding:12px;font-family:ui-monospace,Consolas,monospace;margin-top:10px;max-height:220px;overflow:auto}
+.small{font-size:12px;color:#9fb0ff}
+a.explorer{color:#9ad1ff;text-decoration:underline}
+.timeline{margin-top:6px;background:#0a1130;border:1px solid #22358a;border-radius:14px;padding:14px}
+.step{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:start;padding:10px;border-bottom:1px dashed #1f2d6b}
+.step:last-child{border-bottom:0}.icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#0d1b4e}
+.step.done .icon{background:#0d3e2b}.step.current .icon{background:#0b1f54}.step.fail .icon{background:#3f0e19}
+.title{font-weight:900}.desc{font-size:12px;color:#bcd0ff}.badge{padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800;background:#0b1f54;color:#b9d3ff;height:fit-content}
+.badge.ok{background:#0d3e2b;color:#b9ffd3} .badge.warn{background:#4b3b11;color:#ffe3a1} .badge.err{background:#3f0e19;color:#ffc1cf}
+.invalid{border-color: var(--err) !important; outline: none;}
+.tip{margin-top:4px;background:#3a1622;border:1px solid var(--err);color:#ffd7e0;padding:8px;border-radius:8px;font-size:12px}
+.fixbtn{margin-left:8px;padding:4px 8px;border-radius:8px;border:1px solid #3355ff;background:#1b2a66;color:#cfe3ff;font-weight:800;cursor:pointer}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🎛️ 라이브 드롭다운 + 폴링 + 탐색기 링크</h1>
+    <p class="lead">/get_all_currencies 드롭다운 자동 구성 · 10초 간격 상태 폴링 · 체인별 트랜잭션 링크</p>
+    <div class="grid">
+      <div>
+        <fieldset>
+          <legend>교환 요청</legend>
+          <div class="row">
+            <div><label>From 토큰</label><select id="fromSymbol"></select></div>
+            <div><label>From 네트워크</label><select id="fromNetwork"></select></div>
+          </div>
+          <div class="row">
+            <div><label>To 토큰</label><select id="toSymbol"></select></div>
+            <div><label>To 네트워크</label><select id="toNetwork"></select></div>
+          </div>
+          <div class="row">
+            <div><label>수량</label><input id="amount" type="number" min="0" step="0.0001" placeholder="0.1"/></div>
+            <div><label>레이트</label><select id="rate"><option value="floating">변동가</option><option value="fixed">고정가</option></select></div>
+          </div>
+          <label>수취 주소</label><input id="addr" placeholder="네트워크에 맞는 주소 형식"/>
+          <div id="toExtraWrap" class="row" style="display:none;margin-top:6px">
+            <div><label>수취 Memo/Tag</label><input id="extraTo" placeholder="XRP Tag / XLM Memo"/></div><div></div>
+          </div>
+          <div id="tip-addr" class="tip" style="display:none"></div>
+          <div class="row" style="margin-top:8px">
+            <div>
+              <label>리펀드 주소(From 네트워크 · 필수)</label><input id="refund" required placeholder="네트워크에 맞는 주소 형식"/>
+              <div id="tip-refund" class="tip" style="display:none"></div>
+            </div>
+            <div id="refundExtraWrap" style="display:none">
+              <label>리펀드 Memo/Tag</label><input id="extraRefund" placeholder="XRP Tag / XLM Memo"/>
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button id="btnEstimate">견적 보기</button>
+            <button id="btnCreate">교환 생성</button>
+          </div>
+          <div id="err" class="error"></div>
+          <div id="estimateOut" class="out" hidden></div>
+          <div id="createOut" class="out" hidden></div>
+        </fieldset>
+      </div>
+      <div>
+        <fieldset>
+          <legend>상태 타임라인</legend>
+          <div class="small" id="orderIdLine" style="margin-bottom:8px;display:none">주문 ID: <span id="orderId"></span></div>
+          <div class="small" id="lastUpdate" style="margin-bottom:8px;display:none">업데이트 시각: <span id="ts"></span></div>
+          <div class="timeline" id="timeline"></div>
+          <div id="explorers" class="small" style="display:none;margin-top:8px"></div>
+          <div class="row" style="margin-top:10px">
+            <button class="secondary" id="btnStop">자동 조회 중지</button>
+            <button id="btnRefresh">지금 즉시 조회</button>
+          </div>
+        </fieldset>
+      </div>
+    </div>
+  </div>
+
+<script>
+const $ = s => document.querySelector(s);
+const timeline = $('#timeline');
+let CUR = {}; // {SYMBOL:{networks:Set, hasExtraId:boolean}}
+const NEEDS_EXTRA = new Set(['XRP','XLM']);
+const TERMINAL = new Set(['finished','refunded','failed','expired','cancelled']);
+
+// --- 라이브 드롭다운 ---
+async function loadCurrencies(){
+  const r = await fetch('/api/currencies'); const raw = await r.json();
+  const list = Array.isArray(raw) ? raw : (raw.data || raw.currencies || raw.list || []);
+  const tmp = {};
+  for(const c of list){
+    const sym = String(c.symbol || c.ticker || '').toUpperCase();
+    const net = String(c.network || c.blockchain || c.chain || 'MAIN').toUpperCase();
+    if(!sym) continue;
+    if(!tmp[sym]) tmp[sym] = {networks:new Set(), hasExtraId:false};
+    tmp[sym].networks.add(net);
+    if(c.has_extra_id || /XRP|XLM/i.test(sym)) tmp[sym].hasExtraId = true;
+  }
+  if(!tmp['BTC']) tmp['BTC']={networks:new Set(['MAIN']),hasExtraId:false};
+  if(!tmp['ETH']) tmp['ETH']={networks:new Set(['ETH']),hasExtraId:false};
+  if(!tmp['USDT']) tmp['USDT']={networks:new Set(['ETH','BSC','MATIC','TRON']),hasExtraId:false};
+  if(!tmp['USDC']) tmp['USDC']={networks:new Set(['ETH','BSC','MATIC','TRON']),hasExtraId:false};
+  if(!tmp['XRP']) tmp['XRP']={networks:new Set(['XRPL']),hasExtraId:true};
+  if(!tmp['XLM']) tmp['XLM']={networks:new Set(['STELLAR']),hasExtraId:true};
+  CUR = tmp; fillDropdowns();
+}
+function fillDropdowns(){
+  const syms = Object.keys(CUR).sort();
+  for(const id of ['fromSymbol','toSymbol']) $('#'+id).innerHTML = syms.map(s=>`<option>${s}</option>`).join('');
+  updateNetworks('from'); updateNetworks('to');
+}
+function updateNetworks(prefix){
+  const sym = $('#'+prefix+'Symbol').value.toUpperCase();
+  const nets = Array.from(CUR[sym]?.networks || ['MAIN']);
+  $('#'+prefix+'Network').innerHTML = nets.map(n=>`<option>${n}</option>`).join('');
+  toggleExtraFields(); validateLive();
+}
+$('#fromSymbol').addEventListener('change', ()=>updateNetworks('from'));
+$('#toSymbol').addEventListener('change', ()=>updateNetworks('to'));
+$('#fromNetwork').addEventListener('change', validateLive);
+$('#toNetwork').addEventListener('change', validateLive);
+
+// --- 주소 정밀 검증(심볼:네트워크) ---
+function re(p){ return new RegExp(p); }
+const V = {
+  'BTC:*': re('^(bc1|[13])[a-zA-Z0-9]{25,62}$'),
+  'ETH:*': re('^0x[a-fA-F0-9]{40}$'),
+  'TRX:*': re('^T[1-9A-HJ-NP-Za-km-z]{33}$'),
+  'XRP:*': re('^r[1-9A-HJ-NP-Za-km-z]{24,34}$'),
+  'XLM:*': re('^G[A-Z2-7]{55}$'),
+  'USDT:ETH': re('^0x[a-fA-F0-9]{40}$'),
+  'USDT:BSC': re('^0x[a-fA-F0-9]{40}$'),
+  'USDT:MATIC': re('^0x[a-fA-F0-9]{40}$'),
+  'USDT:TRON': re('^T[1-9A-HJ-NP-Za-km-z]{33}$'),
+  'USDC:ETH': re('^0x[a-fA-F0-9]{40}$'),
+  'USDC:BSC': re('^0x[a-fA-F0-9]{40}$'),
+  'USDC:MATIC': re('^0x[a-fA-F0-9]{40}$'),
+  'USDC:TRON': re('^T[1-9A-HJ-NP-Za-km-z]{33}$')
+};
+function key(sym, net){ return `${sym}:${net||'*'}`; }
+function isValid(sym, net, addr){
+  const pat = V[key(sym, net)] || V[key(sym,'*')];
+  if(!pat) return addr && addr.length>=20 && addr.length<=120;
+  return pat.test(addr||'');
+}
+function toggleExtraFields(){
+  const toSym = $('#toSymbol').value.toUpperCase();
+  const fromSym = $('#fromSymbol').value.toUpperCase();
+  $('#toExtraWrap').style.display = (CUR[toSym]?.hasExtraId || NEEDS_EXTRA.has(toSym)) ? 'grid' : 'none';
+  $('#refundExtraWrap').style.display = (CUR[fromSym]?.hasExtraId || NEEDS_EXTRA.has(fromSym)) ? 'block' : 'none';
+}
+function validateLive(){
+  const fSym=$('#fromSymbol').value.toUpperCase(), fNet=$('#fromNetwork').value.toUpperCase();
+  const tSym=$('#toSymbol').value.toUpperCase(), tNet=$('#toNetwork').value.toUpperCase();
+  const addrOk = isValid(tSym, tNet, $('#addr').value.trim());
+  const refundOk = isValid(fSym, fNet, $('#refund').value.trim());
+  $('#addr').classList.toggle('invalid', $('#addr').value && !addrOk);
+  $('#refund').classList.toggle('invalid', $('#refund').value && !refundOk);
+}
+
+// --- 에러 매핑 + 하이라이트 + Fix now ---
+const ERROR_MAP = [
+  { match:/memo|tag.*(missing|required)/i, title:'메모/태그 누락', desc:'이 체인은 Memo/Tag가 필요합니다. 해당 값을 입력해 주세요.', field:'extra_to' },
+  { match:/refund.*(memo|tag).*missing/i, title:'리펀드 메모/태그 누락', desc:'리펀드용 Memo/Tag가 필요합니다.', field:'extra_refund' },
+  { match:/network.*mismatch|wrong.*network|invalid.*chain/i, title:'네트워크 미일치', desc:'선택한 네트워크와 주소가 일치하지 않습니다.', field:'network' },
+  { match:/min(imum)?\s*amount|too\s*small|amount.*low/i, title:'금액 부족', desc:'최소 교환 수량보다 적습니다.', field:'amount' },
+  { match:/refund.*address.*invalid/i, title:'리펀드 주소 오류', desc:'리펀드 주소 형식이 맞지 않습니다. From 네트워크 주소인지 확인해 주세요.', field:'refund' },
+  { match:/address.*invalid|recipient.*invalid/i, title:'주소 형식 오류', desc:'주소 형식이 맞지 않습니다. 네트워크와 주소를 다시 확인해 주세요.', field:'address' },
+  { match:/timeout|expired/i, title:'만료', desc:'유효 시간이 지났습니다. 새 주문으로 다시 진행해 주세요.', field:null }
+];
+function friendlyError(e){
+  const raw = JSON.stringify(e||{}).slice(0,500);
+  for(const r of ERROR_MAP){ if(r.match.test(raw)) return { title:r.title, desc:r.desc, field:r.field }; }
+  return { title:'알 수 없는 오류', desc:'정확한 원인을 확인 중입니다. 입력값과 네트워크를 다시 점검해 주세요.', field:null };
+}
+function clearHighlights(){
+  for(const id of ['addr','refund','amount','extraTo','extraRefund']){ const el=$('#'+id); el.classList.remove('invalid'); }
+  for(const id of ['tip-addr','tip-refund']){ const t=$('#'+id); t.style.display='none'; t.textContent=''; }
+}
+function fieldIdFor(field){
+  if(field==='address') return 'addr';
+  if(field==='refund') return 'refund';
+  if(field==='amount') return 'amount';
+  if(field==='network') return 'addr';
+  if(field==='extra_to' || field==='extra') return 'extraTo';
+  if(field==='extra_refund') return 'extraRefund';
+  return null;
+}
+function highlightField(field, message){
+  const targetId = fieldIdFor(field);
+  if(!targetId) return;
+  const el = $('#'+targetId);
+  el.classList.add('invalid');
+  el.scrollIntoView({ behavior:'smooth', block:'center' });
+  el.focus();
+  if(targetId==='addr'){ const tip=$('#tip-addr'); tip.textContent=message; tip.style.display='block'; }
+  if(targetId==='refund'){ const tip=$('#tip-refund'); tip.textContent=message; tip.style.display='block'; }
+}
+function addInfo(title,desc){ timeline.insertAdjacentHTML('beforeend', `<div class="step current"><div class="icon"></div><div><div class="title">${title}</div><div class="desc">${desc||''}</div></div><div></div></div>`); }
+function addError(title,desc,field){
+  const fid = fieldIdFor(field);
+  const fix = fid ? `<button class="fixbtn" data-fix="${fid}">바로 고치기</button>` : '';
+  timeline.insertAdjacentHTML('beforeend', `<div class="step fail"><div class="icon"></div><div><div class="title">${title}</div><div class="desc">${desc||''}</div></div><div class="badge err">오류 ${fix}</div></div>`);
+  bindFixButtons();
+}
+function bindFixButtons(){
+  document.querySelectorAll('.fixbtn').forEach(btn=>{
+    btn.onclick = ()=>{
+      const id = btn.getAttribute('data-fix');
+      const reverse = { addr:'address', refund:'refund', amount:'amount', extraTo:'extra_to', extraRefund:'extra_refund' };
+      highlightField(reverse[id]||null, '입력값을 수정해 주세요.');
+    };
+  });
+}
+
+// --- 탐색기 링크 ---
+function explorerUrl(symbol, network, tx){
+  if(!tx) return null;
+  const s=(symbol||'').toUpperCase(), n=(network||'').toUpperCase();
+  if(s==='BTC') return 'https://mempool.space/tx/'+tx;
+  if(s==='ETH'||n==='ETH'||n==='ERC20') return 'https://etherscan.io/tx/'+tx;
+  if(n==='BSC'||s==='BNB') return 'https://bscscan.com/tx/'+tx;
+  if(n==='MATIC'||s==='MATIC'||n==='POLYGON') return 'https://polygonscan.com/tx/'+tx;
+  if(s==='TRX'||n==='TRON'||n==='TRC20') return 'https://tronscan.org/#/transaction/'+tx;
+  if(s==='XRP') return 'https://xrpscan.com/tx/'+tx;
+  if(s==='XLM') return 'https://stellar.expert/explorer/public/tx/'+tx;
+  if(s==='SOL') return 'https://solscan.io/tx/'+tx;
+  return null;
+}
+function showExplorers(data){
+  const txIn = data?.txid || data?.txid_in || data?.deposit_txid;
+  const txOut = data?.txid_out || data?.withdrawal_txid || data?.payout_txid;
+  const fromSym=$('#fromSymbol').value, fromNet=$('#fromNetwork').value;
+  const toSym=$('#toSymbol').value, toNet=$('#toNetwork').value;
+  const links=[];
+  const inUrl = explorerUrl(fromSym, fromNet, txIn); if(inUrl) links.push(`입금 TX: <a class="explorer" href="${inUrl}" target="_blank" rel="noopener">열기</a>`);
+  const outUrl= explorerUrl(toSym, toNet, txOut); if(outUrl) links.push(`출금 TX: <a class="explorer" href="${outUrl}" target="_blank" rel="noopener">열기</a>`);
+  const box = $('#explorers');
+  box.style.display = links.length ? 'block' : 'none';
+  box.innerHTML = links.join(' &nbsp;·&nbsp; ');
+}
+
+// --- 상태 타임라인 렌더 ---
+function renderTimeline(cur){
+  const steps=['waiting','confirming','exchanging','sending','finished'];
+  const s=(cur||'unknown').toLowerCase(); const idx=steps.indexOf(s);
+  const TXT={waiting:'입금 대기',confirming:'컨펌 중',exchanging:'교환 중',sending:'전송 중',finished:'완료'};
+  const html = steps.map((k,i)=>{
+    const st=i<idx?'done':(i===idx?'current':'todo');
+    const badge = i===idx ? `<div class="badge ${s==='finished'?'ok':(s==='waiting'?'':(s==='confirming'?'':(s==='exchanging'?'':(s==='sending'?'':'warn'))))}">상태: ${s}</div>` : '';
+    return `<div class="step ${st}"><div class="icon"></div><div><div class="title">${TXT[k]}</div></div>${badge}</div>`;
+  }).join('');
+  timeline.innerHTML = html;
+}
+
+// --- API + 폴링 ---
+let pollTimer=null, orderId=null;
+function showErr(m){ const e=$('#err'); e.textContent=m||''; e.style.display=m?'block':'none'; }
+async function estimate(){
+  showErr(''); $('#estimateOut').hidden=true;
+  try{
+    const q = new URLSearchParams({from:$('#fromSymbol').value,to:$('#toSymbol').value,amount:$('#amount').value,rateType:$('#rate').value});
+    const r=await fetch('/api/estimate?'+q.toString()); const j=await r.json();
+    if(j.error || j.ok===false){ const fe=friendlyError(j); addError(fe.title,fe.desc,fe.field); highlightField(fe.field, fe.desc); return; }
+    $('#estimateOut').hidden=false; $('#estimateOut').textContent=JSON.stringify(j,null,2);
+  }catch(e){ const fe=friendlyError(e); addError(fe.title, fe.desc, fe.field); }
+}
+async function createOrder(){
+  showErr(''); clearHighlights();
+  try{
+    const body={ from:$('#fromSymbol').value, to:$('#toSymbol').value, amount:$('#amount').value, rateType:$('#rate').value,
+      address:$('#addr').value, refund:$('#refund').value, extraTo:$('#extraTo').value||'', extraRefund:$('#extraRefund').value||'' };
+    const r=await fetch('/api/create-exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const j=await r.json();
+    if(j.error || j.ok===false){ const fe=friendlyError(j); addError(fe.title,fe.desc,fe.field); highlightField(fe.field, fe.desc); return; }
+    $('#createOut').hidden=false; $('#createOut').textContent=JSON.stringify(j,null,2);
+    orderId=j?.id||j?.exchange_id||j?.data?.id||j?.data?.exchange_id;
+    if(!orderId){ addError('주문 ID 확인 불가','응답에서 주문 ID를 찾을 수 없습니다.',null); return; }
+    $('#orderIdLine').style.display='block'; $('#orderId').textContent=orderId; $('#lastUpdate').style.display='block';
+    renderTimeline('waiting'); await pollOnce(); if(pollTimer) clearInterval(pollTimer); pollTimer=setInterval(pollOnce,10000);
+  }catch(e){ const fe=friendlyError(e); addError(fe.title, fe.desc, fe.field); }
+}
+async function pollOnce(){
+  if(!orderId) return;
+  const r=await fetch('/api/status/'+encodeURIComponent(orderId)); const j=await r.json(); const d=j?.data||j;
+  const s=(d?.status||d?.state||'unknown').toLowerCase(); $('#ts').textContent=new Date().toLocaleString('ko-KR');
+  renderTimeline(s); showExplorers(d);
+  if(TERMINAL.has(s)){ if(pollTimer) clearInterval(pollTimer); }
+}
+$('#btnEstimate').onclick=estimate; $('#btnCreate').onclick=createOrder; $('#btnStop').onclick=()=>{ if(pollTimer) clearInterval(pollTimer); }; $('#btnRefresh').onclick=pollOnce;
+
+// init
+loadCurrencies();
+</script>
+</body></html>
